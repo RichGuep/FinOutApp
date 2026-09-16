@@ -3,16 +3,11 @@ FindOut - App principal.
 Validador de procesos de Greenmovil S.A.S. (nómina y bonificaciones).
 """
 
-import sys
-from pathlib import Path
-
-sys.path.append(str(Path(__file__).parent))
-
 import streamlit as st
 
 import auth
-from utils.styling import inject_css
-from modules import bonificacion
+import bonificacion
+from styling import inject_css
 
 st.set_page_config(
     page_title="FindOut | Greenmovil",

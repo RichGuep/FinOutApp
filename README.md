@@ -91,17 +91,20 @@ FindOut/
 ├── app.py                     # App principal: login, navegación
 ├── auth.py                    # Autenticación y gestión de usuarios
 ├── db.py                      # Conexión y consultas al DWH GRMDW
+├── bonificacion.py            # Módulo 1: validador de bonificación
+├── styling.py                 # Estilos con la paleta #145A4F
 ├── requirements.txt
 ├── .streamlit/
 │   ├── config.toml            # Tema de colores Greenmovil
 │   └── secrets.toml.example   # Plantilla de credenciales (copiar y completar)
-├── modules/
-│   └── bonificacion.py        # Módulo 1: validador de bonificación
-├── utils/
-│   └── styling.py             # Estilos con la paleta #145A4F
 └── data/
     └── findout_users.db       # Usuarios de la app (se crea automáticamente)
 ```
+
+> Nota: todos los `.py` están en la raíz del proyecto (sin subcarpetas
+> `modules/` o `utils/`) a propósito, para evitar errores de
+> `ModuleNotFoundError` en Streamlit Cloud cuando una carpeta o su
+> `__init__.py` no queda correctamente subida al repositorio.
 
 ## 8. Notas y siguientes pasos
 
