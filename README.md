@@ -43,10 +43,14 @@ user = "richard.guevara"
 password = "TU_CONTRASEÑA_REAL"
 ```
 
-> Alternativa rápida para pruebas: dentro del módulo Bonificación hay un
-> expander **"Conexión manual al DWH"** en la barra lateral donde puedes
-> escribir la contraseña solo para esa sesión, sin guardarla en ningún
-> archivo.
+> El módulo Bonificación muestra en la barra lateral un panel **"Conexión al
+> DWH"**, precargado automáticamente con los valores de `secrets.toml`
+> (incluida la contraseña, en un campo tipo contraseña). Ahí puedes pulsar
+> **"Probar conexión"** para verificar que todo esté bien antes de ejecutar
+> la validación. Ten en cuenta que, al precargar la contraseña en ese campo,
+> cualquier persona con acceso a las herramientas de desarrollador del
+> navegador podría leerla — está pensado como ayuda interna, no para un
+> entorno expuesto a terceros.
 
 ## 4. Ejecutar la aplicación
 
@@ -81,8 +85,15 @@ Se abrirá en `http://localhost:8501`.
    - Lo compara contra `Puntos PM Conciliados` del archivo.
    - Marca cada registro como `OK`, `ALERTA` (diferencia de puntos),
      `NO ENCONTRADO EN DWH` o `NO ENCONTRADO EN ARCHIVO`.
+   - Verifica además, sobre **todas** las novedades del DWH del período
+     (sin importar el filtro de Procede), si existen registros marcados
+     como `Procede = No` que igual tengan `Puntos PM Conciliados > 0` —
+     una inconsistencia que no debería ocurrir y se muestra aparte, con su
+     propio detalle.
    - Muestra un resumen con métricas y una tabla coloreada por estado.
-   - Permite descargar el reporte completo en Excel, ya resaltado.
+   - Permite descargar el reporte completo en Excel, ya resaltado, con una
+     hoja adicional (`Procede No con Puntos`) si se encontró esa
+     inconsistencia.
 
 ## 7. Estructura del proyecto
 

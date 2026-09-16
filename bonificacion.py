@@ -34,16 +34,42 @@ def _normalizar(texto) -> str:
 
 
 def _conexion_manual():
-    """Permite probar la app sin secrets.toml, escribiendo la conexión en la barra lateral.
-    No se guarda en ningún lado; solo vive en la sesión del navegador."""
-    with st.sidebar.expander("🔌 Conexión manual al DWH (opcional)"):
-        st.caption("Solo necesaria si aún no configuraste .streamlit/secrets.toml")
-        host = st.text_input("Host", value="10.0.22.78", key="man_host")
-        port = st.text_input("Puerto", value="5432", key="man_port")
-        database = st.text_input("Base de datos", value="GRMDW", key="man_db")
-        user = st.text_input("Usuario", value="richard.guevara", key="man_user")
-        password = st.text_input("Contraseña", type="password", key="man_pass")
-        usar_manual = st.checkbox("Usar esta conexión en lugar de secrets.toml", key="man_usar")
+    """
+    Muestra en la barra lateral los parámetros de conexión al DWH, precargados
+    desde .streamlit/secrets.toml cuando existen, con un botón para probar la
+    conexión y ver el resultado al instante.
+    """
+    cfg = st.secrets.get("dwh", {}) if hasattr(st, "secrets") else {}
+
+    with st.sidebar.expander("🔌 Conexión al DWH", expanded=True):
+        st.caption("Precargado desde secrets.toml. Puedes editarlo aquí solo para esta sesión.")
+        host = st.text_input("Host", value=str(cfg.get("host", "10.0.22.78")), key="man_host")
+        port = st.text_input("Puerto", value=str(cfg.get("port", "5432")), key="man_port")
+        database = st.text_input("Base de datos", value=str(cfg.get("database", "GRMDW")), key="man_db")
+        user = st.text_input("Usuario", value=str(cfg.get("user", "richard.guevara")), key="man_user")
+        password = st.text_input(
+            "Contraseña", type="password", value=str(cfg.get("password", "")), key="man_pass"
+        )
+
+        col_probar, col_usar = st.columns(2)
+        with col_probar:
+            probar = st.button("🔎 Probar conexión", use_container_width=True)
+        with col_usar:
+            usar_manual = st.checkbox("Usar estos datos", key="man_usar")
+
+        if probar:
+            if not user or not password:
+                st.error("Completa usuario y contraseña para probar la conexión.")
+            else:
+                with st.spinner("Conectando..."):
+                    try:
+                        engine_prueba = db.construir_engine(
+                            host=host, port=port, database=database, user=user, password=password
+                        )
+                        db.probar_conexion(engine_prueba)
+                        st.success(f"✅ Conexión exitosa a {database}@{host}:{port}")
+                    except Exception as e:
+                        st.error(f"❌ No se pudo conectar:\n\n{e}")
 
     if usar_manual and user and password:
         return db.construir_engine(host=host, port=port, database=database, user=user, password=password)
@@ -122,20 +148,32 @@ def render():
 
     with st.spinner("Consultando novedades en el DWH..."):
         try:
-            df_dwh = db.obtener_novedades(
-                fecha_inicio, fecha_fin, solo_procede=solo_procede, engine=engine_manual
-            )
+            df_dwh_completo = db.obtener_novedades(fecha_inicio, fecha_fin, engine=engine_manual)
         except Exception as e:
             st.error(f"No fue posible consultar el DWH: {e}")
             return
 
-    if df_dwh.empty:
+    if df_dwh_completo.empty:
         st.warning("El DWH no devolvió novedades para el período seleccionado.")
         return
 
+    # Inconsistencia a validar en los datos del DWH: novedades marcadas como
+    # "Procede = No" que, sin embargo, tienen puntos PM conciliados mayores
+    # a cero. Esto se revisa sobre TODAS las novedades del período, sin
+    # importar el filtro de Procede elegido arriba para el cruce principal.
+    df_anomalias_procede = df_dwh_completo[
+        (~df_dwh_completo["EsProcede"]) & (df_dwh_completo["PuntosPmConciliados"] > 0)
+    ].copy()
+
+    df_dwh = df_dwh_completo[df_dwh_completo["EsProcede"]] if solo_procede else df_dwh_completo
+
+    if df_dwh.empty:
+        st.warning("No quedaron novedades del DWH después de aplicar el filtro de Procede.")
+        return
+
     st.caption(
-        f"Novedades obtenidas del DWH: {len(df_dwh)} registros, "
-        f"{df_dwh['Operador'].nunique()} operadores distintos."
+        f"Novedades obtenidas del DWH: {len(df_dwh_completo)} registros en el período, "
+        f"{len(df_dwh)} consideradas para el cruce ({df_dwh['Operador'].nunique()} operadores)."
     )
 
     df_dwh_agrupado = (
@@ -179,6 +217,22 @@ def render():
     no_dwh_n = int((resultado_final["Estado"] == "NO ENCONTRADO EN DWH").sum())
     no_archivo_n = int((resultado_final["Estado"] == "NO ENCONTRADO EN ARCHIVO").sum())
 
+    st.markdown("### Consistencia de novedades en el DWH")
+    if df_anomalias_procede.empty:
+        st.success("No se encontraron novedades con Procede = No que tengan puntos PM conciliados mayores a cero.")
+    else:
+        st.error(
+            f"⚠️ Se encontraron {len(df_anomalias_procede)} novedades marcadas como **Procede = No** "
+            "que igualmente tienen puntos PM conciliados mayores a cero. Esto no debería ocurrir y debe revisarse."
+        )
+        with st.expander(f"Ver detalle de la inconsistencia ({len(df_anomalias_procede)} registros)", expanded=True):
+            st.dataframe(
+                df_anomalias_procede[
+                    ["Fecha", "Operador", "TipoNovedad", "PmGrupo", "DetalleNovedad", "PuntosPmConciliados", "Procede"]
+                ].sort_values(["Operador", "Fecha"]),
+                use_container_width=True,
+            )
+
     st.markdown("### Resumen del cruce")
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Total registros", total)
@@ -210,7 +264,7 @@ def render():
     with st.expander(f"🔴 Alertas y diferencias ({alerta_n + no_dwh_n + no_archivo_n})"):
         st.dataframe(resultado_final[resultado_final["Estado"] != "OK"], use_container_width=True)
 
-    excel_bytes = _generar_reporte_excel(resultado_final)
+    excel_bytes = _generar_reporte_excel(resultado_final, df_anomalias_procede)
     st.download_button(
         "⬇️ Descargar reporte de validación (Excel)",
         data=excel_bytes,
@@ -220,7 +274,7 @@ def render():
     )
 
 
-def _generar_reporte_excel(df: pd.DataFrame) -> bytes:
+def _generar_reporte_excel(df: pd.DataFrame, df_anomalias_procede: pd.DataFrame = None) -> bytes:
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Cruce Bonificacion")
@@ -251,6 +305,29 @@ def _generar_reporte_excel(df: pd.DataFrame) -> bytes:
         for columna in ws.columns:
             longitud = max((len(str(c.value)) if c.value is not None else 0) for c in columna)
             ws.column_dimensions[columna[0].column_letter].width = min(longitud + 2, 40)
+
+        if df_anomalias_procede is not None and not df_anomalias_procede.empty:
+            columnas_anom = [
+                "Fecha", "Operador", "TipoNovedad", "PmGrupo", "DetalleNovedad", "PuntosPmConciliados", "Procede"
+            ]
+            columnas_anom = [c for c in columnas_anom if c in df_anomalias_procede.columns]
+            df_anomalias_procede[columnas_anom].to_excel(
+                writer, index=False, sheet_name="Procede No con Puntos"
+            )
+            ws2 = writer.sheets["Procede No con Puntos"]
+
+            fill_alerta = PatternFill(start_color=COLOR_ALERTA, end_color=COLOR_ALERTA, fill_type="solid")
+            for fila in range(2, ws2.max_row + 1):
+                for celda in ws2[fila]:
+                    celda.fill = fill_alerta
+
+            for cell in ws2[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(start_color=COLOR_HEADER, end_color=COLOR_HEADER, fill_type="solid")
+
+            for columna in ws2.columns:
+                longitud = max((len(str(c.value)) if c.value is not None else 0) for c in columna)
+                ws2.column_dimensions[columna[0].column_letter].width = min(longitud + 2, 40)
 
     buffer.seek(0)
     return buffer.getvalue()

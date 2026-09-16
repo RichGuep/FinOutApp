@@ -49,14 +49,14 @@ def _es_procede(valor) -> bool:
     return texto in {"SI", "SÍ", "S", "TRUE", "1", "T"}
 
 
-def obtener_novedades(fecha_inicio, fecha_fin, solo_procede: bool = True, engine=None) -> pd.DataFrame:
+def obtener_novedades(fecha_inicio, fecha_fin, engine=None) -> pd.DataFrame:
     """
     Consulta op."FactNovedadesOperador" en el rango de fechas indicado y
-    devuelve las columnas relevantes para el cruce de bonificación.
-
-    El filtro de "Procede" se aplica en pandas (no en SQL) porque el tipo de
-    dato de esa columna puede variar (booleano, texto, entero) y así evitamos
-    errores de tipo en la consulta.
+    devuelve TODAS las novedades del período (sin filtrar por Procede), con
+    una columna adicional "EsProcede" (booleano, ya normalizado). Cada
+    validación decide después cómo usar ese campo: para el cruce principal
+    solo se suman las que sí proceden; para detectar inconsistencias se usan
+    todas.
     """
     eng = engine or construir_engine()
 
@@ -78,9 +78,7 @@ def obtener_novedades(fecha_inicio, fecha_fin, solo_procede: bool = True, engine
     with eng.connect() as conn:
         df = pd.read_sql(query, conn, params={"fecha_inicio": fecha_inicio, "fecha_fin": fecha_fin})
 
-    if solo_procede and "Procede" in df.columns:
-        df = df[df["Procede"].apply(_es_procede)].copy()
-
     df["PuntosPmConciliados"] = pd.to_numeric(df["PuntosPmConciliados"], errors="coerce").fillna(0)
+    df["EsProcede"] = df["Procede"].apply(_es_procede)
 
     return df

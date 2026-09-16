@@ -26,8 +26,32 @@ def inject_css():
         section[data-testid="stSidebar"] {{
             background: linear-gradient(180deg, {PRIMARIO_OSCURO} 0%, {PRIMARIO} 100%);
         }}
-        section[data-testid="stSidebar"] * {{
+        /* Texto claro para etiquetas, títulos y párrafos del sidebar... */
+        section[data-testid="stSidebar"] p,
+        section[data-testid="stSidebar"] span,
+        section[data-testid="stSidebar"] label,
+        section[data-testid="stSidebar"] h1,
+        section[data-testid="stSidebar"] h2,
+        section[data-testid="stSidebar"] h3,
+        section[data-testid="stSidebar"] .stMarkdown,
+        section[data-testid="stSidebar"] .stCaption,
+        section[data-testid="stSidebar"] svg {{
             color: {BLANCO} !important;
+            fill: {BLANCO} !important;
+        }}
+
+        /* ...pero NO dentro de los campos de entrada: ahí el fondo es blanco,
+           así que el texto debe quedar oscuro o sería invisible (blanco sobre blanco). */
+        section[data-testid="stSidebar"] input,
+        section[data-testid="stSidebar"] textarea,
+        section[data-testid="stSidebar"] select,
+        section[data-testid="stSidebar"] div[data-baseweb="select"] * {{
+            color: {TEXTO} !important;
+            fill: {TEXTO} !important;
+        }}
+        section[data-testid="stSidebar"] input,
+        section[data-testid="stSidebar"] textarea {{
+            background-color: {BLANCO} !important;
         }}
         .sidebar-brand {{
             font-size: 1.6rem;
